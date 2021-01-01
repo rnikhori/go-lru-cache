@@ -1,0 +1,80 @@
+package lru
+
+import "testing"
+
+func TestGetPutBasic(t *testing.T) {
+	c := New[string, int](2)
+
+	c.Put("a", 1)
+	c.Put("b", 2)
+
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Fatalf("Get(a) = %v, %v; want 1, true", v, ok)
+	}
+	if v, ok := c.Get("b"); !ok || v != 2 {
+		t.Fatalf("Get(b) = %v, %v; want 2, true", v, ok)
+	}
+	if _, ok := c.Get("missing"); ok {
+		t.Fatalf("Get(missing) = _, true; want false")
+	}
+	if got := c.Len(); got != 2 {
+		t.Fatalf("Len() = %d; want 2", got)
+	}
+}
+
+func TestEvictsLeastRecentlyUsed(t *testing.T) {
+	c := New[int, string](3)
+
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three")
+
+	// Touch 1 so that 2 becomes the least-recently-used entry.
+	c.Get(1)
+
+	c.Put(4, "four")
+
+	if _, ok := c.Get(2); ok {
+		t.Fatalf("expected key 2 to be evicted")
+	}
+	if v, ok := c.Get(1); !ok || v != "one" {
+		t.Fatalf("expected key 1 to survive, got %v, %v", v, ok)
+	}
+	if v, ok := c.Get(3); !ok || v != "three" {
+		t.Fatalf("expected key 3 to survive, got %v, %v", v, ok)
+	}
+	if v, ok := c.Get(4); !ok || v != "four" {
+		t.Fatalf("expected key 4 to be present, got %v, %v", v, ok)
+	}
+	if got := c.Len(); got != 3 {
+		t.Fatalf("Len() = %d; want 3", got)
+	}
+}
+
+func TestPutUpdatesExistingKey(t *testing.T) {
+	c := New[string, int](2)
+
+	c.Put("a", 1)
+	c.Put("a", 100)
+
+	if v, ok := c.Get("a"); !ok || v != 100 {
+		t.Fatalf("Get(a) = %v, %v; want 100, true", v, ok)
+	}
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
+func TestCapacityOneEvictsImmediately(t *testing.T) {
+	c := New[int, int](1)
+
+	c.Put(1, 10)
+	c.Put(2, 20)
+
+	if _, ok := c.Get(1); ok {
+		t.Fatalf("expected key 1 to be evicted")
+	}
+	if v, ok := c.Get(2); !ok || v != 20 {
+		t.Fatalf("Get(2) = %v, %v; want 20, true", v, ok)
+	}
+}
