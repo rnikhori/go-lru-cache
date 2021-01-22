@@ -6,6 +6,10 @@ import (
 	"sync"
 )
 
+// Option configures a Cache at construction time. Options are applied in
+// the order they are passed to New.
+type Option[K comparable, V any] func(*Cache[K, V])
+
 // Cache is a fixed-capacity LRU cache. The zero value is not usable;
 // create one with New.
 type Cache[K comparable, V any] struct {
@@ -21,16 +25,21 @@ type entry[K comparable, V any] struct {
 }
 
 // New creates an LRU cache that holds at most capacity entries. A
-// non-positive capacity is treated as 1.
-func New[K comparable, V any](capacity int) *Cache[K, V] {
+// non-positive capacity is treated as 1. Options can be supplied to
+// customize cache behavior.
+func New[K comparable, V any](capacity int, opts ...Option[K, V]) *Cache[K, V] {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &Cache[K, V]{
+	c := &Cache[K, V]{
 		capacity: capacity,
 		ll:       list.New(),
 		items:    make(map[K]*list.Element, capacity),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // Get returns the value stored for key and marks it as recently used.
