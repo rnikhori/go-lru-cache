@@ -6,9 +6,31 @@ import (
 	"sync"
 )
 
+// EvictReason describes why an entry left the cache.
+type EvictReason int
+
+const (
+	// EvictReasonCapacity means the entry was evicted to make room for a
+	// new entry after the cache reached its capacity.
+	EvictReasonCapacity EvictReason = iota
+)
+
+// OnEvictFunc is invoked whenever an entry leaves the cache. It runs
+// synchronously while the cache's internal lock is held, so it must not
+// call back into the same Cache.
+type OnEvictFunc[K comparable, V any] func(key K, value V, reason EvictReason)
+
 // Option configures a Cache at construction time. Options are applied in
 // the order they are passed to New.
 type Option[K comparable, V any] func(*Cache[K, V])
+
+// WithOnEvict registers a callback invoked whenever an entry is evicted
+// from the cache.
+func WithOnEvict[K comparable, V any](fn OnEvictFunc[K, V]) Option[K, V] {
+	return func(c *Cache[K, V]) {
+		c.onEvict = fn
+	}
+}
 
 // Cache is a fixed-capacity LRU cache. The zero value is not usable;
 // create one with New.
@@ -17,6 +39,7 @@ type Cache[K comparable, V any] struct {
 	capacity int
 	ll       *list.List
 	items    map[K]*list.Element
+	onEvict  OnEvictFunc[K, V]
 }
 
 type entry[K comparable, V any] struct {
@@ -89,6 +112,10 @@ func (c *Cache[K, V]) evictOldest() {
 	if oldest == nil {
 		return
 	}
+	en := oldest.Value.(*entry[K, V])
 	c.ll.Remove(oldest)
-	delete(c.items, oldest.Value.(*entry[K, V]).key)
+	delete(c.items, en.key)
+	if c.onEvict != nil {
+		c.onEvict(en.key, en.value, EvictReasonCapacity)
+	}
 }
