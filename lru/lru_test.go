@@ -65,6 +65,45 @@ func TestPutUpdatesExistingKey(t *testing.T) {
 	}
 }
 
+func TestOnEvictFiresOnCapacityEviction(t *testing.T) {
+	type evicted struct {
+		key    int
+		value  string
+		reason EvictReason
+	}
+	var got []evicted
+
+	c := New[int, string](2, WithOnEvict(func(key int, value string, reason EvictReason) {
+		got = append(got, evicted{key, value, reason})
+	}))
+
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three") // evicts 1
+
+	if len(got) != 1 {
+		t.Fatalf("len(got) = %d; want 1", len(got))
+	}
+	want := evicted{key: 1, value: "one", reason: EvictReasonCapacity}
+	if got[0] != want {
+		t.Fatalf("evicted = %+v; want %+v", got[0], want)
+	}
+}
+
+func TestOnEvictNotCalledWithoutEviction(t *testing.T) {
+	called := false
+	c := New[int, string](2, WithOnEvict(func(int, string, EvictReason) {
+		called = true
+	}))
+
+	c.Put(1, "one")
+	c.Get(1)
+
+	if called {
+		t.Fatalf("OnEvict callback invoked without any eviction")
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
