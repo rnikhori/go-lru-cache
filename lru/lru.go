@@ -15,6 +15,16 @@ const (
 	EvictReasonCapacity EvictReason = iota
 )
 
+// String returns a human-readable name for the eviction reason.
+func (r EvictReason) String() string {
+	switch r {
+	case EvictReasonCapacity:
+		return "capacity"
+	default:
+		return "unknown"
+	}
+}
+
 // OnEvictFunc is invoked whenever an entry leaves the cache. It runs
 // synchronously while the cache's internal lock is held, so it must not
 // call back into the same Cache.
