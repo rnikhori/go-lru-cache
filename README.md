@@ -29,6 +29,18 @@ func main() {
 }
 ```
 
+## Eviction callbacks
+
+Pass `WithOnEvict` to `New` to be notified whenever an entry leaves the
+cache. The callback runs synchronously while the cache's internal lock is
+held, so it must not call back into the same cache:
+
+```go
+cache := lru.New[string, int](2, lru.WithOnEvict(func(key string, value int, reason lru.EvictReason) {
+	fmt.Printf("evicted %q=%d (%s)\n", key, value, reason)
+}))
+```
+
 Run the included example:
 
 ```sh
