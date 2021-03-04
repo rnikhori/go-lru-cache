@@ -13,6 +13,9 @@ const (
 	// EvictReasonCapacity means the entry was evicted to make room for a
 	// new entry after the cache reached its capacity.
 	EvictReasonCapacity EvictReason = iota
+	// EvictReasonRemoved means the entry was removed by an explicit call
+	// to Remove.
+	EvictReasonRemoved
 )
 
 // String returns a human-readable name for the eviction reason.
@@ -20,6 +23,8 @@ func (r EvictReason) String() string {
 	switch r {
 	case EvictReasonCapacity:
 		return "capacity"
+	case EvictReasonRemoved:
+		return "removed"
 	default:
 		return "unknown"
 	}
@@ -117,15 +122,35 @@ func (c *Cache[K, V]) Len() int {
 	return c.ll.Len()
 }
 
+// Remove deletes key from the cache, if present, invoking the OnEvict
+// callback with EvictReasonRemoved. It reports whether key was found.
+func (c *Cache[K, V]) Remove(key K) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	el, ok := c.items[key]
+	if !ok {
+		return false
+	}
+	c.removeElement(el, EvictReasonRemoved)
+	return true
+}
+
 func (c *Cache[K, V]) evictOldest() {
 	oldest := c.ll.Back()
 	if oldest == nil {
 		return
 	}
-	en := oldest.Value.(*entry[K, V])
-	c.ll.Remove(oldest)
+	c.removeElement(oldest, EvictReasonCapacity)
+}
+
+// removeElement unlinks el from the list and map and invokes the OnEvict
+// callback, if any. Callers must hold c.mu.
+func (c *Cache[K, V]) removeElement(el *list.Element, reason EvictReason) {
+	en := el.Value.(*entry[K, V])
+	c.ll.Remove(el)
 	delete(c.items, en.key)
 	if c.onEvict != nil {
-		c.onEvict(en.key, en.value, EvictReasonCapacity)
+		c.onEvict(en.key, en.value, reason)
 	}
 }
