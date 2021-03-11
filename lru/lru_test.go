@@ -104,6 +104,53 @@ func TestOnEvictNotCalledWithoutEviction(t *testing.T) {
 	}
 }
 
+func TestRemoveDeletesExistingKey(t *testing.T) {
+	c := New[string, int](2)
+	c.Put("a", 1)
+	c.Put("b", 2)
+
+	if ok := c.Remove("a"); !ok {
+		t.Fatalf("Remove(a) = false; want true")
+	}
+	if _, ok := c.Get("a"); ok {
+		t.Fatalf("expected key a to be gone after Remove")
+	}
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
+func TestRemoveMissingKeyReturnsFalse(t *testing.T) {
+	c := New[string, int](2)
+	c.Put("a", 1)
+
+	if ok := c.Remove("missing"); ok {
+		t.Fatalf("Remove(missing) = true; want false")
+	}
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
+func TestRemoveFiresOnEvictWithRemovedReason(t *testing.T) {
+	var gotReason EvictReason
+	calls := 0
+	c := New[string, int](2, WithOnEvict(func(key string, value int, reason EvictReason) {
+		calls++
+		gotReason = reason
+	}))
+	c.Put("a", 1)
+
+	c.Remove("a")
+
+	if calls != 1 {
+		t.Fatalf("OnEvict called %d times; want 1", calls)
+	}
+	if gotReason != EvictReasonRemoved {
+		t.Fatalf("reason = %v; want %v", gotReason, EvictReasonRemoved)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
