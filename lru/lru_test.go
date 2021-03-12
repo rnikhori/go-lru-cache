@@ -151,6 +151,55 @@ func TestRemoveFiresOnEvictWithRemovedReason(t *testing.T) {
 	}
 }
 
+func TestClearEmptiesCache(t *testing.T) {
+	c := New[string, int](3)
+	c.Put("a", 1)
+	c.Put("b", 2)
+	c.Put("c", 3)
+
+	c.Clear()
+
+	if got := c.Len(); got != 0 {
+		t.Fatalf("Len() after Clear = %d; want 0", got)
+	}
+	for _, k := range []string{"a", "b", "c"} {
+		if _, ok := c.Get(k); ok {
+			t.Fatalf("Get(%q) after Clear = true; want false", k)
+		}
+	}
+}
+
+func TestClearFiresOnEvictForEachEntry(t *testing.T) {
+	var reasons []EvictReason
+	c := New[string, int](3, WithOnEvict(func(key string, value int, reason EvictReason) {
+		reasons = append(reasons, reason)
+	}))
+	c.Put("a", 1)
+	c.Put("b", 2)
+
+	c.Clear()
+
+	if len(reasons) != 2 {
+		t.Fatalf("len(reasons) = %d; want 2", len(reasons))
+	}
+	for _, r := range reasons {
+		if r != EvictReasonCleared {
+			t.Fatalf("reason = %v; want %v", r, EvictReasonCleared)
+		}
+	}
+}
+
+func TestClearThenPutWorksNormally(t *testing.T) {
+	c := New[string, int](2)
+	c.Put("a", 1)
+	c.Clear()
+
+	c.Put("b", 2)
+	if v, ok := c.Get("b"); !ok || v != 2 {
+		t.Fatalf("Get(b) after Clear+Put = %v, %v; want 2, true", v, ok)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
