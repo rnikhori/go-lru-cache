@@ -16,6 +16,8 @@ const (
 	// EvictReasonRemoved means the entry was removed by an explicit call
 	// to Remove.
 	EvictReasonRemoved
+	// EvictReasonCleared means the entry was removed by a call to Clear.
+	EvictReasonCleared
 )
 
 // String returns a human-readable name for the eviction reason.
@@ -25,6 +27,8 @@ func (r EvictReason) String() string {
 		return "capacity"
 	case EvictReasonRemoved:
 		return "removed"
+	case EvictReasonCleared:
+		return "cleared"
 	default:
 		return "unknown"
 	}
@@ -134,6 +138,24 @@ func (c *Cache[K, V]) Remove(key K) bool {
 	}
 	c.removeElement(el, EvictReasonRemoved)
 	return true
+}
+
+// Clear removes all entries from the cache, invoking the OnEvict callback
+// for each one with EvictReasonCleared.
+func (c *Cache[K, V]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for el := c.ll.Front(); el != nil; {
+		next := el.Next()
+		en := el.Value.(*entry[K, V])
+		if c.onEvict != nil {
+			c.onEvict(en.key, en.value, EvictReasonCleared)
+		}
+		el = next
+	}
+	c.ll.Init()
+	c.items = make(map[K]*list.Element, c.capacity)
 }
 
 func (c *Cache[K, V]) evictOldest() {
