@@ -41,6 +41,16 @@ cache := lru.New[string, int](2, lru.WithOnEvict(func(key string, value int, rea
 }))
 ```
 
+## Removing entries
+
+`Remove` deletes a single key, and `Clear` empties the whole cache. Both
+fire `OnEvict` for the entries they remove:
+
+```go
+cache.Remove("a")  // EvictReasonRemoved
+cache.Clear()      // EvictReasonCleared, once per remaining entry
+```
+
 Run the included example:
 
 ```sh
