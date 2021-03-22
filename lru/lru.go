@@ -98,6 +98,20 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 	return el.Value.(*entry[K, V]).value, true
 }
 
+// Peek returns the value stored for key without marking it as recently
+// used, leaving the eviction order unchanged.
+func (c *Cache[K, V]) Peek(key K) (V, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	el, ok := c.items[key]
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	return el.Value.(*entry[K, V]).value, true
+}
+
 // Put inserts or updates the value for key, marking it as recently used.
 // If the cache is at capacity and key is new, the least-recently-used
 // entry is evicted.
