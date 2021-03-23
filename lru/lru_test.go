@@ -200,6 +200,33 @@ func TestClearThenPutWorksNormally(t *testing.T) {
 	}
 }
 
+func TestPeekReturnsValueWithoutPromoting(t *testing.T) {
+	c := New[int, string](2)
+	c.Put(1, "one")
+	c.Put(2, "two")
+
+	if v, ok := c.Peek(1); !ok || v != "one" {
+		t.Fatalf("Peek(1) = %v, %v; want one, true", v, ok)
+	}
+
+	// 1 should still be least-recently-used since Peek must not promote it.
+	c.Put(3, "three")
+
+	if _, ok := c.Get(1); ok {
+		t.Fatalf("expected key 1 to be evicted despite Peek")
+	}
+	if v, ok := c.Get(2); !ok || v != "two" {
+		t.Fatalf("expected key 2 to survive, got %v, %v", v, ok)
+	}
+}
+
+func TestPeekMissingKey(t *testing.T) {
+	c := New[int, string](2)
+	if _, ok := c.Peek(99); ok {
+		t.Fatalf("Peek(99) = true; want false")
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
