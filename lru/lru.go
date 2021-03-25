@@ -140,6 +140,31 @@ func (c *Cache[K, V]) Len() int {
 	return c.ll.Len()
 }
 
+// Keys returns the cache's keys ordered from most- to least-recently used.
+func (c *Cache[K, V]) Keys() []K {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	keys := make([]K, 0, c.ll.Len())
+	for el := c.ll.Front(); el != nil; el = el.Next() {
+		keys = append(keys, el.Value.(*entry[K, V]).key)
+	}
+	return keys
+}
+
+// Values returns the cache's values ordered from most- to least-recently
+// used.
+func (c *Cache[K, V]) Values() []V {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	values := make([]V, 0, c.ll.Len())
+	for el := c.ll.Front(); el != nil; el = el.Next() {
+		values = append(values, el.Value.(*entry[K, V]).value)
+	}
+	return values
+}
+
 // Remove deletes key from the cache, if present, invoking the OnEvict
 // callback with EvictReasonRemoved. It reports whether key was found.
 func (c *Cache[K, V]) Remove(key K) bool {
