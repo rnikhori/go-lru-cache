@@ -1,6 +1,9 @@
 package lru
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestGetPutBasic(t *testing.T) {
 	c := New[string, int](2)
@@ -224,6 +227,43 @@ func TestPeekMissingKey(t *testing.T) {
 	c := New[int, string](2)
 	if _, ok := c.Peek(99); ok {
 		t.Fatalf("Peek(99) = true; want false")
+	}
+}
+
+func TestKeysOrderedMostToLeastRecentlyUsed(t *testing.T) {
+	c := New[int, string](3)
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three")
+	c.Get(1) // promote 1 to most-recently-used
+
+	want := []int{1, 3, 2}
+	if got := c.Keys(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Keys() = %v; want %v", got, want)
+	}
+}
+
+func TestValuesOrderedMostToLeastRecentlyUsed(t *testing.T) {
+	c := New[int, string](3)
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three")
+	c.Get(1)
+
+	want := []string{"one", "three", "two"}
+	if got := c.Values(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Values() = %v; want %v", got, want)
+	}
+}
+
+func TestKeysAndValuesOnEmptyCache(t *testing.T) {
+	c := New[int, string](2)
+
+	if got := c.Keys(); len(got) != 0 {
+		t.Fatalf("Keys() on empty cache = %v; want empty", got)
+	}
+	if got := c.Values(); len(got) != 0 {
+		t.Fatalf("Values() on empty cache = %v; want empty", got)
 	}
 }
 
