@@ -51,6 +51,17 @@ cache.Remove("a")  // EvictReasonRemoved
 cache.Clear()      // EvictReasonCleared, once per remaining entry
 ```
 
+## Inspecting the cache
+
+`Peek` reads a value without affecting recency order. `Keys` and `Values`
+return the current contents ordered from most- to least-recently used:
+
+```go
+v, ok := cache.Peek("a")     // doesn't promote "a"
+keys := cache.Keys()         // most-recently used first
+values := cache.Values()
+```
+
 Run the included example:
 
 ```sh
