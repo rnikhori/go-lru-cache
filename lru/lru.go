@@ -4,6 +4,7 @@ package lru
 import (
 	"container/list"
 	"sync"
+	"sync/atomic"
 )
 
 // EvictReason describes why an entry left the cache.
@@ -51,6 +52,13 @@ func WithOnEvict[K comparable, V any](fn OnEvictFunc[K, V]) Option[K, V] {
 	}
 }
 
+// Stats holds cumulative counters describing cache activity. All counters
+// only ever increase for the lifetime of a Cache.
+type Stats struct {
+	Hits   uint64
+	Misses uint64
+}
+
 // Cache is a fixed-capacity LRU cache. The zero value is not usable;
 // create one with New.
 type Cache[K comparable, V any] struct {
@@ -59,6 +67,9 @@ type Cache[K comparable, V any] struct {
 	ll       *list.List
 	items    map[K]*list.Element
 	onEvict  OnEvictFunc[K, V]
+
+	hits   atomic.Uint64
+	misses atomic.Uint64
 }
 
 type entry[K comparable, V any] struct {
@@ -91,10 +102,12 @@ func (c *Cache[K, V]) Get(key K) (V, bool) {
 
 	el, ok := c.items[key]
 	if !ok {
+		c.misses.Add(1)
 		var zero V
 		return zero, false
 	}
 	c.ll.MoveToFront(el)
+	c.hits.Add(1)
 	return el.Value.(*entry[K, V]).value, true
 }
 
@@ -106,9 +119,11 @@ func (c *Cache[K, V]) Peek(key K) (V, bool) {
 
 	el, ok := c.items[key]
 	if !ok {
+		c.misses.Add(1)
 		var zero V
 		return zero, false
 	}
+	c.hits.Add(1)
 	return el.Value.(*entry[K, V]).value, true
 }
 
@@ -163,6 +178,15 @@ func (c *Cache[K, V]) Values() []V {
 		values = append(values, el.Value.(*entry[K, V]).value)
 	}
 	return values
+}
+
+// Stats returns a snapshot of the cache's cumulative hit/miss counters.
+// It is safe to call concurrently with any other method.
+func (c *Cache[K, V]) Stats() Stats {
+	return Stats{
+		Hits:   c.hits.Load(),
+		Misses: c.misses.Load(),
+	}
 }
 
 // Remove deletes key from the cache, if present, invoking the OnEvict
