@@ -267,6 +267,33 @@ func TestKeysAndValuesOnEmptyCache(t *testing.T) {
 	}
 }
 
+func TestStatsTracksHitsAndMisses(t *testing.T) {
+	c := New[string, int](2)
+	c.Put("a", 1)
+
+	c.Get("a")        // hit
+	c.Get("missing")  // miss
+	c.Peek("a")       // hit
+	c.Peek("missing") // miss
+	c.Get("a")        // hit
+
+	got := c.Stats()
+	if got.Hits != 3 {
+		t.Fatalf("Hits = %d; want 3", got.Hits)
+	}
+	if got.Misses != 2 {
+		t.Fatalf("Misses = %d; want 2", got.Misses)
+	}
+}
+
+func TestStatsStartsAtZero(t *testing.T) {
+	c := New[string, int](2)
+	got := c.Stats()
+	if got.Hits != 0 || got.Misses != 0 {
+		t.Fatalf("Stats() = %+v; want zero value", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
