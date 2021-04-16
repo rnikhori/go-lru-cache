@@ -53,10 +53,12 @@ func WithOnEvict[K comparable, V any](fn OnEvictFunc[K, V]) Option[K, V] {
 }
 
 // Stats holds cumulative counters describing cache activity. All counters
-// only ever increase for the lifetime of a Cache.
+// only ever increase for the lifetime of a Cache. Evictions counts every
+// entry removal that fires OnEvict, regardless of EvictReason.
 type Stats struct {
-	Hits   uint64
-	Misses uint64
+	Hits      uint64
+	Misses    uint64
+	Evictions uint64
 }
 
 // Cache is a fixed-capacity LRU cache. The zero value is not usable;
@@ -68,8 +70,9 @@ type Cache[K comparable, V any] struct {
 	items    map[K]*list.Element
 	onEvict  OnEvictFunc[K, V]
 
-	hits   atomic.Uint64
-	misses atomic.Uint64
+	hits      atomic.Uint64
+	misses    atomic.Uint64
+	evictions atomic.Uint64
 }
 
 type entry[K comparable, V any] struct {
@@ -184,8 +187,9 @@ func (c *Cache[K, V]) Values() []V {
 // It is safe to call concurrently with any other method.
 func (c *Cache[K, V]) Stats() Stats {
 	return Stats{
-		Hits:   c.hits.Load(),
-		Misses: c.misses.Load(),
+		Hits:      c.hits.Load(),
+		Misses:    c.misses.Load(),
+		Evictions: c.evictions.Load(),
 	}
 }
 
@@ -212,6 +216,7 @@ func (c *Cache[K, V]) Clear() {
 	for el := c.ll.Front(); el != nil; {
 		next := el.Next()
 		en := el.Value.(*entry[K, V])
+		c.evictions.Add(1)
 		if c.onEvict != nil {
 			c.onEvict(en.key, en.value, EvictReasonCleared)
 		}
@@ -235,6 +240,7 @@ func (c *Cache[K, V]) removeElement(el *list.Element, reason EvictReason) {
 	en := el.Value.(*entry[K, V])
 	c.ll.Remove(el)
 	delete(c.items, en.key)
+	c.evictions.Add(1)
 	if c.onEvict != nil {
 		c.onEvict(en.key, en.value, reason)
 	}
