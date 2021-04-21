@@ -294,6 +294,27 @@ func TestStatsStartsAtZero(t *testing.T) {
 	}
 }
 
+func TestStatsTracksEvictionsAcrossReasons(t *testing.T) {
+	c := New[int, string](2)
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three") // evicts 1 by capacity
+
+	if got := c.Stats().Evictions; got != 1 {
+		t.Fatalf("Evictions after capacity eviction = %d; want 1", got)
+	}
+
+	c.Remove(2)
+	if got := c.Stats().Evictions; got != 2 {
+		t.Fatalf("Evictions after Remove = %d; want 2", got)
+	}
+
+	c.Clear()
+	if got := c.Stats().Evictions; got != 3 {
+		t.Fatalf("Evictions after Clear = %d; want 3", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
