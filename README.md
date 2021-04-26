@@ -62,6 +62,16 @@ keys := cache.Keys()         // most-recently used first
 values := cache.Values()
 ```
 
+## Stats
+
+`Stats` reports cumulative hit, miss, and eviction counts, safe to read
+concurrently from any goroutine:
+
+```go
+s := cache.Stats()
+fmt.Printf("hits=%d misses=%d evictions=%d\n", s.Hits, s.Misses, s.Evictions)
+```
+
 Run the included example:
 
 ```sh
