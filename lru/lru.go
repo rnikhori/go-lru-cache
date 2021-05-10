@@ -183,6 +183,19 @@ func (c *Cache[K, V]) Values() []V {
 	return values
 }
 
+// Resize changes the cache's capacity. If the new capacity is smaller than
+// the current number of entries, the least-recently-used entries are
+// evicted with EvictReasonCapacity until the cache fits.
+func (c *Cache[K, V]) Resize(capacity int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.capacity = capacity
+	for c.ll.Len() > c.capacity {
+		c.evictOldest()
+	}
+}
+
 // Stats returns a snapshot of the cache's cumulative hit/miss counters.
 // It is safe to call concurrently with any other method.
 func (c *Cache[K, V]) Stats() Stats {
