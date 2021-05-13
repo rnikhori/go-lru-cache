@@ -315,6 +315,48 @@ func TestStatsTracksEvictionsAcrossReasons(t *testing.T) {
 	}
 }
 
+func TestResizeGrowAllowsMoreEntries(t *testing.T) {
+	c := New[int, string](2)
+	c.Put(1, "one")
+	c.Put(2, "two")
+
+	c.Resize(3)
+	c.Put(3, "three")
+
+	if got := c.Len(); got != 3 {
+		t.Fatalf("Len() = %d; want 3", got)
+	}
+	for _, k := range []int{1, 2, 3} {
+		if _, ok := c.Get(k); !ok {
+			t.Fatalf("expected key %d to survive growth", k)
+		}
+	}
+}
+
+func TestResizeShrinkEvictsLeastRecentlyUsed(t *testing.T) {
+	var evicted []int
+	c := New[int, string](3, WithOnEvict(func(key int, value string, reason EvictReason) {
+		evicted = append(evicted, key)
+	}))
+	c.Put(1, "one")
+	c.Put(2, "two")
+	c.Put(3, "three")
+	c.Get(1) // 1 most recent, order: 1, 3, 2
+
+	c.Resize(1)
+
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+	if v, ok := c.Get(1); !ok || v != "one" {
+		t.Fatalf("expected key 1 to survive, got %v, %v", v, ok)
+	}
+	want := []int{2, 3}
+	if len(evicted) != 2 || evicted[0] != want[0] || evicted[1] != want[1] {
+		t.Fatalf("evicted = %v; want %v", evicted, want)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
