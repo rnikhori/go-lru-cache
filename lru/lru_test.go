@@ -357,6 +357,22 @@ func TestResizeShrinkEvictsLeastRecentlyUsed(t *testing.T) {
 	}
 }
 
+func TestResizeNonPositiveCapacityTreatedAsOne(t *testing.T) {
+	c := New[int, string](3)
+	c.Put(1, "one")
+	c.Put(2, "two")
+
+	c.Resize(0)
+
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() after Resize(0) = %d; want 1", got)
+	}
+	c.Put(3, "three")
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() after Put following Resize(0) = %d; want 1", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 

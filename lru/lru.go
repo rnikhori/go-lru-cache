@@ -187,6 +187,10 @@ func (c *Cache[K, V]) Values() []V {
 // the current number of entries, the least-recently-used entries are
 // evicted with EvictReasonCapacity until the cache fits.
 func (c *Cache[K, V]) Resize(capacity int) {
+	if capacity < 1 {
+		capacity = 1
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
