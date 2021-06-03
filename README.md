@@ -72,6 +72,16 @@ s := cache.Stats()
 fmt.Printf("hits=%d misses=%d evictions=%d\n", s.Hits, s.Misses, s.Evictions)
 ```
 
+## Resizing
+
+`Resize` changes capacity at runtime. Shrinking evicts least-recently-used
+entries as needed; a non-positive capacity is treated as 1, matching `New`:
+
+```go
+cache.Resize(10) // grow
+cache.Resize(2)  // shrink, evicting down to 2 entries
+```
+
 Run the included example:
 
 ```sh
