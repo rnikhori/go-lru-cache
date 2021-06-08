@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // EvictReason describes why an entry left the cache.
@@ -73,6 +74,10 @@ type Cache[K comparable, V any] struct {
 	hits      atomic.Uint64
 	misses    atomic.Uint64
 	evictions atomic.Uint64
+
+	// now is the time source used for TTL calculations. It defaults to
+	// time.Now and is overridden in tests to make expiry deterministic.
+	now func() time.Time
 }
 
 type entry[K comparable, V any] struct {
@@ -91,6 +96,7 @@ func New[K comparable, V any](capacity int, opts ...Option[K, V]) *Cache[K, V] {
 		capacity: capacity,
 		ll:       list.New(),
 		items:    make(map[K]*list.Element, capacity),
+		now:      time.Now,
 	}
 	for _, opt := range opts {
 		opt(c)
