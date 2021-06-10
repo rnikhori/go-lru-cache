@@ -20,6 +20,9 @@ const (
 	EvictReasonRemoved
 	// EvictReasonCleared means the entry was removed by a call to Clear.
 	EvictReasonCleared
+	// EvictReasonExpired means the entry's TTL had passed when it was
+	// discovered, either lazily on access or by a purge.
+	EvictReasonExpired
 )
 
 // String returns a human-readable name for the eviction reason.
@@ -31,6 +34,8 @@ func (r EvictReason) String() string {
 		return "removed"
 	case EvictReasonCleared:
 		return "cleared"
+	case EvictReasonExpired:
+		return "expired"
 	default:
 		return "unknown"
 	}
@@ -81,8 +86,13 @@ type Cache[K comparable, V any] struct {
 }
 
 type entry[K comparable, V any] struct {
-	key   K
-	value V
+	key      K
+	value    V
+	expireAt time.Time // zero value means no expiry
+}
+
+func (e *entry[K, V]) expired(now time.Time) bool {
+	return !e.expireAt.IsZero() && !now.Before(e.expireAt)
 }
 
 // New creates an LRU cache that holds at most capacity entries. A
@@ -138,18 +148,37 @@ func (c *Cache[K, V]) Peek(key K) (V, bool) {
 
 // Put inserts or updates the value for key, marking it as recently used.
 // If the cache is at capacity and key is new, the least-recently-used
-// entry is evicted.
+// entry is evicted. The entry has no expiry.
 func (c *Cache[K, V]) Put(key K, value V) {
+	c.put(key, value, 0)
+}
+
+// PutWithTTL is like Put but the entry expires after ttl. A ttl of zero
+// or less means the entry never expires. Once expired, the entry is
+// treated as absent and is lazily evicted on the next Get, Peek, or
+// PurgeExpired call.
+func (c *Cache[K, V]) PutWithTTL(key K, value V, ttl time.Duration) {
+	c.put(key, value, ttl)
+}
+
+func (c *Cache[K, V]) put(key K, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	var expireAt time.Time
+	if ttl > 0 {
+		expireAt = c.now().Add(ttl)
+	}
+
 	if el, ok := c.items[key]; ok {
-		el.Value.(*entry[K, V]).value = value
+		en := el.Value.(*entry[K, V])
+		en.value = value
+		en.expireAt = expireAt
 		c.ll.MoveToFront(el)
 		return
 	}
 
-	el := c.ll.PushFront(&entry[K, V]{key: key, value: value})
+	el := c.ll.PushFront(&entry[K, V]{key: key, value: value, expireAt: expireAt})
 	c.items[key] = el
 
 	if c.ll.Len() > c.capacity {
