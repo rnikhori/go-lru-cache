@@ -3,6 +3,7 @@ package lru
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestGetPutBasic(t *testing.T) {
@@ -370,6 +371,82 @@ func TestResizeNonPositiveCapacityTreatedAsOne(t *testing.T) {
 	c.Put(3, "three")
 	if got := c.Len(); got != 1 {
 		t.Fatalf("Len() after Put following Resize(0) = %d; want 1", got)
+	}
+}
+
+// fakeClock returns a now func() time.Time whose value can be advanced
+// manually, for deterministic TTL tests.
+func fakeClock(start time.Time) (now func() time.Time, advance func(time.Duration)) {
+	t := start
+	return func() time.Time { return t }, func(d time.Duration) { t = t.Add(d) }
+}
+
+func TestPutWithTTLExpiresOnGet(t *testing.T) {
+	c := New[string, int](2)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Fatalf("Get(a) before expiry = %v, %v; want 1, true", v, ok)
+	}
+
+	advance(11 * time.Millisecond)
+
+	if _, ok := c.Get("a"); ok {
+		t.Fatalf("Get(a) after expiry = true; want false")
+	}
+	if got := c.Len(); got != 0 {
+		t.Fatalf("Len() after expiry eviction = %d; want 0", got)
+	}
+}
+
+func TestPutWithTTLFiresOnEvictWithExpiredReason(t *testing.T) {
+	var gotReason EvictReason
+	calls := 0
+	c := New[string, int](2, WithOnEvict(func(key string, value int, reason EvictReason) {
+		calls++
+		gotReason = reason
+	}))
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 5*time.Millisecond)
+	advance(6 * time.Millisecond)
+	c.Get("a")
+
+	if calls != 1 {
+		t.Fatalf("OnEvict called %d times; want 1", calls)
+	}
+	if gotReason != EvictReasonExpired {
+		t.Fatalf("reason = %v; want %v", gotReason, EvictReasonExpired)
+	}
+}
+
+func TestPutWithTTLNonPositiveMeansNoExpiry(t *testing.T) {
+	c := New[string, int](2)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 0)
+	advance(24 * time.Hour)
+
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Fatalf("Get(a) = %v, %v; want 1, true", v, ok)
+	}
+}
+
+func TestPutHasNoExpiry(t *testing.T) {
+	c := New[string, int](2)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.Put("a", 1)
+	advance(365 * 24 * time.Hour)
+
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Fatalf("Get(a) = %v, %v; want 1, true", v, ok)
 	}
 }
 
