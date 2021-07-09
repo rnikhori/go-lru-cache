@@ -149,8 +149,15 @@ func (c *Cache[K, V]) Peek(key K) (V, bool) {
 		var zero V
 		return zero, false
 	}
+	en := el.Value.(*entry[K, V])
+	if en.expired(c.now()) {
+		c.removeElement(el, EvictReasonExpired)
+		c.misses.Add(1)
+		var zero V
+		return zero, false
+	}
 	c.hits.Add(1)
-	return el.Value.(*entry[K, V]).value, true
+	return en.value, true
 }
 
 // Put inserts or updates the value for key, marking it as recently used.
