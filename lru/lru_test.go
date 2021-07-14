@@ -450,6 +450,35 @@ func TestPutHasNoExpiry(t *testing.T) {
 	}
 }
 
+func TestPeekExpiresEntry(t *testing.T) {
+	c := New[string, int](2)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+	advance(11 * time.Millisecond)
+
+	if _, ok := c.Peek("a"); ok {
+		t.Fatalf("Peek(a) after expiry = true; want false")
+	}
+	if got := c.Len(); got != 0 {
+		t.Fatalf("Len() after Peek-triggered expiry = %d; want 0", got)
+	}
+}
+
+func TestPeekDoesNotExpireBeforeTTL(t *testing.T) {
+	c := New[string, int](2)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+	advance(5 * time.Millisecond)
+
+	if v, ok := c.Peek("a"); !ok || v != 1 {
+		t.Fatalf("Peek(a) = %v, %v; want 1, true", v, ok)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
