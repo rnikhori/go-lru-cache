@@ -67,6 +67,15 @@ type Stats struct {
 	Evictions uint64
 }
 
+// WithDefaultTTL sets a default time-to-live applied to entries inserted
+// via Put. It has no effect on PutWithTTL calls, which always use the
+// ttl passed explicitly.
+func WithDefaultTTL[K comparable, V any](d time.Duration) Option[K, V] {
+	return func(c *Cache[K, V]) {
+		c.defaultTTL = d
+	}
+}
+
 // Cache is a fixed-capacity LRU cache. The zero value is not usable;
 // create one with New.
 type Cache[K comparable, V any] struct {
@@ -83,6 +92,8 @@ type Cache[K comparable, V any] struct {
 	// now is the time source used for TTL calculations. It defaults to
 	// time.Now and is overridden in tests to make expiry deterministic.
 	now func() time.Time
+
+	defaultTTL time.Duration
 }
 
 type entry[K comparable, V any] struct {
@@ -162,9 +173,11 @@ func (c *Cache[K, V]) Peek(key K) (V, bool) {
 
 // Put inserts or updates the value for key, marking it as recently used.
 // If the cache is at capacity and key is new, the least-recently-used
-// entry is evicted. The entry has no expiry.
+// entry is evicted. The entry expires according to the cache's default
+// TTL, if one was configured via WithDefaultTTL; otherwise it never
+// expires.
 func (c *Cache[K, V]) Put(key K, value V) {
-	c.put(key, value, 0)
+	c.put(key, value, c.defaultTTL)
 }
 
 // PutWithTTL is like Put but the entry expires after ttl. A ttl of zero
