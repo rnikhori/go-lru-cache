@@ -479,6 +479,32 @@ func TestPeekDoesNotExpireBeforeTTL(t *testing.T) {
 	}
 }
 
+func TestWithDefaultTTLAppliesToPut(t *testing.T) {
+	c := New[string, int](2, WithDefaultTTL[string, int](10*time.Millisecond))
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.Put("a", 1)
+	advance(11 * time.Millisecond)
+
+	if _, ok := c.Get("a"); ok {
+		t.Fatalf("Get(a) after default TTL expiry = true; want false")
+	}
+}
+
+func TestPutWithTTLOverridesDefaultTTL(t *testing.T) {
+	c := New[string, int](2, WithDefaultTTL[string, int](10*time.Millisecond))
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 0) // no expiry, overriding the default TTL
+	advance(1 * time.Hour)
+
+	if v, ok := c.Get("a"); !ok || v != 1 {
+		t.Fatalf("Get(a) = %v, %v; want 1, true", v, ok)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
