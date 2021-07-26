@@ -213,18 +213,23 @@ func (c *Cache[K, V]) put(key K, value V, ttl time.Duration) {
 	}
 }
 
-// Len returns the number of entries currently stored in the cache.
+// Len returns the number of non-expired entries currently stored in the
+// cache. Entries past their TTL that have not yet been lazily evicted by
+// Get/Peek or purged are not counted.
 func (c *Cache[K, V]) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.purgeExpiredLocked()
 	return c.ll.Len()
 }
 
-// Keys returns the cache's keys ordered from most- to least-recently used.
+// Keys returns the cache's non-expired keys ordered from most- to
+// least-recently used.
 func (c *Cache[K, V]) Keys() []K {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.purgeExpiredLocked()
 	keys := make([]K, 0, c.ll.Len())
 	for el := c.ll.Front(); el != nil; el = el.Next() {
 		keys = append(keys, el.Value.(*entry[K, V]).key)
@@ -232,12 +237,13 @@ func (c *Cache[K, V]) Keys() []K {
 	return keys
 }
 
-// Values returns the cache's values ordered from most- to least-recently
-// used.
+// Values returns the cache's non-expired values ordered from most- to
+// least-recently used.
 func (c *Cache[K, V]) Values() []V {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.purgeExpiredLocked()
 	values := make([]V, 0, c.ll.Len())
 	for el := c.ll.Front(); el != nil; el = el.Next() {
 		values = append(values, el.Value.(*entry[K, V]).value)
@@ -303,6 +309,21 @@ func (c *Cache[K, V]) Clear() {
 	}
 	c.ll.Init()
 	c.items = make(map[K]*list.Element, c.capacity)
+}
+
+// purgeExpiredLocked removes every expired entry. Callers must hold c.mu.
+func (c *Cache[K, V]) purgeExpiredLocked() int {
+	now := c.now()
+	purged := 0
+	for el := c.ll.Front(); el != nil; {
+		next := el.Next()
+		if el.Value.(*entry[K, V]).expired(now) {
+			c.removeElement(el, EvictReasonExpired)
+			purged++
+		}
+		el = next
+	}
+	return purged
 }
 
 func (c *Cache[K, V]) evictOldest() {
