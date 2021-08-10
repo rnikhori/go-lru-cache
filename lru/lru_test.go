@@ -505,6 +505,37 @@ func TestPutWithTTLOverridesDefaultTTL(t *testing.T) {
 	}
 }
 
+func TestLenExcludesExpiredEntries(t *testing.T) {
+	c := New[string, int](3)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+	c.Put("b", 2)
+	advance(11 * time.Millisecond)
+
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
+func TestKeysAndValuesExcludeExpiredEntries(t *testing.T) {
+	c := New[string, int](3)
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+	c.Put("b", 2)
+	advance(11 * time.Millisecond)
+
+	if got := c.Keys(); !reflect.DeepEqual(got, []string{"b"}) {
+		t.Fatalf("Keys() = %v; want [b]", got)
+	}
+	if got := c.Values(); !reflect.DeepEqual(got, []int{2}) {
+		t.Fatalf("Values() = %v; want [2]", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
