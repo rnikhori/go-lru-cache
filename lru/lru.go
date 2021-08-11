@@ -268,6 +268,18 @@ func (c *Cache[K, V]) Resize(capacity int) {
 	}
 }
 
+// PurgeExpired proactively sweeps the cache and evicts every entry past
+// its TTL, firing OnEvict with EvictReasonExpired for each one. It
+// returns the number of entries removed. Calling it is optional: Get,
+// Peek, Len, Keys, and Values all evict expired entries lazily on their
+// own, but PurgeExpired is useful to reclaim memory from entries that
+// are never looked up again, or to drive a background janitor.
+func (c *Cache[K, V]) PurgeExpired() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.purgeExpiredLocked()
+}
+
 // Stats returns a snapshot of the cache's cumulative hit/miss counters.
 // It is safe to call concurrently with any other method.
 func (c *Cache[K, V]) Stats() Stats {
