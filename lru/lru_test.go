@@ -536,6 +536,48 @@ func TestKeysAndValuesExcludeExpiredEntries(t *testing.T) {
 	}
 }
 
+func TestPurgeExpiredRemovesOnlyExpiredEntries(t *testing.T) {
+	var evicted []string
+	c := New[string, int](5, WithOnEvict(func(key string, value int, reason EvictReason) {
+		evicted = append(evicted, key)
+	}))
+	now, advance := fakeClock(time.Now())
+	c.now = now
+
+	c.PutWithTTL("a", 1, 10*time.Millisecond)
+	c.PutWithTTL("b", 2, 10*time.Millisecond)
+	c.Put("c", 3)
+	advance(11 * time.Millisecond)
+
+	n := c.PurgeExpired()
+
+	if n != 2 {
+		t.Fatalf("PurgeExpired() = %d; want 2", n)
+	}
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() after purge = %d; want 1", got)
+	}
+	if got := c.Stats().Evictions; got != 2 {
+		t.Fatalf("Evictions = %d; want 2", got)
+	}
+	want := map[string]bool{"a": true, "b": true}
+	if len(evicted) != 2 || !want[evicted[0]] || !want[evicted[1]] {
+		t.Fatalf("evicted = %v; want a and b in some order", evicted)
+	}
+}
+
+func TestPurgeExpiredNoOpWhenNothingExpired(t *testing.T) {
+	c := New[string, int](2)
+	c.Put("a", 1)
+
+	if n := c.PurgeExpired(); n != 0 {
+		t.Fatalf("PurgeExpired() = %d; want 0", n)
+	}
+	if got := c.Len(); got != 1 {
+		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
