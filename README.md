@@ -82,6 +82,28 @@ cache.Resize(10) // grow
 cache.Resize(2)  // shrink, evicting down to 2 entries
 ```
 
+## TTL / expiration
+
+Entries can carry an optional expiry. `PutWithTTL` sets it per entry;
+`WithDefaultTTL` sets one for every `Put` call. Expired entries are
+treated as absent and are lazily evicted the next time they're looked up
+via `Get`, `Peek`, `Len`, `Keys`, or `Values`:
+
+```go
+cache := lru.New[string, int](100, lru.WithDefaultTTL[string, int](time.Minute))
+
+cache.Put("a", 1)                                  // expires in 1 minute
+cache.PutWithTTL("b", 2, 5*time.Second)             // expires sooner
+cache.PutWithTTL("c", 3, 0)                         // never expires
+```
+
+Call `PurgeExpired` to proactively sweep and evict everything past its
+TTL — useful for entries that are set once and never read again:
+
+```go
+n := cache.PurgeExpired() // number of entries removed
+```
+
 Run the included example:
 
 ```sh
