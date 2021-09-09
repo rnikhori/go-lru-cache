@@ -94,6 +94,9 @@ type Cache[K comparable, V any] struct {
 	now func() time.Time
 
 	defaultTTL time.Duration
+
+	janitorStop chan struct{}
+	janitorDone chan struct{}
 }
 
 type entry[K comparable, V any] struct {
@@ -278,6 +281,36 @@ func (c *Cache[K, V]) PurgeExpired() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.purgeExpiredLocked()
+}
+
+// StartJanitor launches a background goroutine that calls PurgeExpired
+// every interval until StopJanitor is called. It is a no-op if a janitor
+// is already running.
+func (c *Cache[K, V]) StartJanitor(interval time.Duration) {
+	c.mu.Lock()
+	if c.janitorStop != nil {
+		c.mu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	c.janitorStop = stop
+	c.janitorDone = done
+	c.mu.Unlock()
+
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				c.PurgeExpired()
+			case <-stop:
+				return
+			}
+		}
+	}()
 }
 
 // Stats returns a snapshot of the cache's cumulative hit/miss counters.
