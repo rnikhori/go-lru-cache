@@ -313,6 +313,23 @@ func (c *Cache[K, V]) StartJanitor(interval time.Duration) {
 	}()
 }
 
+// StopJanitor stops the background goroutine started by StartJanitor and
+// waits for it to exit. It is a no-op if no janitor is running.
+func (c *Cache[K, V]) StopJanitor() {
+	c.mu.Lock()
+	stop := c.janitorStop
+	done := c.janitorDone
+	c.janitorStop = nil
+	c.janitorDone = nil
+	c.mu.Unlock()
+
+	if stop == nil {
+		return
+	}
+	close(stop)
+	<-done
+}
+
 // Stats returns a snapshot of the cache's cumulative hit/miss counters.
 // It is safe to call concurrently with any other method.
 func (c *Cache[K, V]) Stats() Stats {
