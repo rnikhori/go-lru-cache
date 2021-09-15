@@ -2,6 +2,7 @@ package lru
 
 import (
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -575,6 +576,47 @@ func TestPurgeExpiredNoOpWhenNothingExpired(t *testing.T) {
 	}
 	if got := c.Len(); got != 1 {
 		t.Fatalf("Len() = %d; want 1", got)
+	}
+}
+
+func TestJanitorPurgesExpiredEntriesOverTime(t *testing.T) {
+	purged := make(chan string, 1)
+	c := New[string, int](2, WithOnEvict(func(key string, value int, reason EvictReason) {
+		if reason == EvictReasonExpired {
+			purged <- key
+		}
+	}))
+
+	c.PutWithTTL("a", 1, 5*time.Millisecond)
+	c.StartJanitor(5 * time.Millisecond)
+	defer c.StopJanitor()
+
+	select {
+	case key := <-purged:
+		if key != "a" {
+			t.Fatalf("purged key = %q; want a", key)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for janitor to purge expired entry")
+	}
+}
+
+func TestStopJanitorStopsFurtherPurging(t *testing.T) {
+	var count int32
+	c := New[string, int](2, WithOnEvict(func(key string, value int, reason EvictReason) {
+		if reason == EvictReasonExpired {
+			atomic.AddInt32(&count, 1)
+		}
+	}))
+
+	c.StartJanitor(2 * time.Millisecond)
+	c.StopJanitor()
+
+	c.PutWithTTL("a", 1, 1*time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+
+	if atomic.LoadInt32(&count) != 0 {
+		t.Fatalf("purge count after StopJanitor = %d; want 0", count)
 	}
 }
 
