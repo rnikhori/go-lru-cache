@@ -620,6 +620,41 @@ func TestStopJanitorStopsFurtherPurging(t *testing.T) {
 	}
 }
 
+func TestStartJanitorTwiceIsNoOp(t *testing.T) {
+	c := New[string, int](2)
+
+	c.StartJanitor(time.Hour)
+	firstStop := c.janitorStop
+	c.StartJanitor(time.Hour) // should be a no-op, not replace the running janitor
+
+	if c.janitorStop != firstStop {
+		t.Fatalf("second StartJanitor replaced the running janitor's stop channel")
+	}
+	c.StopJanitor()
+}
+
+func TestStopJanitorTwiceDoesNotPanic(t *testing.T) {
+	c := New[string, int](2)
+	c.StartJanitor(time.Hour)
+	c.StopJanitor()
+	c.StopJanitor() // must not panic or block
+}
+
+func TestStopJanitorWithoutStartIsNoOp(t *testing.T) {
+	c := New[string, int](2)
+	c.StopJanitor() // must not panic or block
+}
+
+func TestJanitorCanBeRestartedAfterStop(t *testing.T) {
+	c := New[string, int](2)
+	c.StartJanitor(time.Hour)
+	c.StopJanitor()
+	c.StartJanitor(5 * time.Millisecond)
+	defer c.StopJanitor()
+
+	time.Sleep(20 * time.Millisecond) // give the new janitor a chance to tick
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
