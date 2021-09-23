@@ -104,6 +104,20 @@ TTL — useful for entries that are set once and never read again:
 n := cache.PurgeExpired() // number of entries removed
 ```
 
+## Background janitor
+
+`StartJanitor` runs `PurgeExpired` on a ticker in its own goroutine, so
+expired entries are reclaimed even if nothing ever calls `Get` on them
+again. `StopJanitor` stops it and waits for the goroutine to exit:
+
+```go
+cache.StartJanitor(time.Minute)
+defer cache.StopJanitor()
+```
+
+Starting a janitor while one is already running is a no-op; stopping one
+that isn't running is also a no-op.
+
 Run the included example:
 
 ```sh
