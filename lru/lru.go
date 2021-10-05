@@ -254,6 +254,14 @@ func (c *Cache[K, V]) Values() []V {
 	return values
 }
 
+// Cap returns the cache's current capacity, as set by New or the most
+// recent call to Resize.
+func (c *Cache[K, V]) Cap() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.capacity
+}
+
 // Resize changes the cache's capacity. If the new capacity is smaller than
 // the current number of entries, the least-recently-used entries are
 // evicted with EvictReasonCapacity until the cache fits.
