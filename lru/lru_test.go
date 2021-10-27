@@ -655,6 +655,25 @@ func TestJanitorCanBeRestartedAfterStop(t *testing.T) {
 	time.Sleep(20 * time.Millisecond) // give the new janitor a chance to tick
 }
 
+func TestCapReflectsConstructedCapacity(t *testing.T) {
+	c := New[string, int](7)
+	if got := c.Cap(); got != 7 {
+		t.Fatalf("Cap() = %d; want 7", got)
+	}
+}
+
+func TestCapReflectsResize(t *testing.T) {
+	c := New[string, int](2)
+	c.Resize(9)
+	if got := c.Cap(); got != 9 {
+		t.Fatalf("Cap() after Resize(9) = %d; want 9", got)
+	}
+	c.Resize(0)
+	if got := c.Cap(); got != 1 {
+		t.Fatalf("Cap() after Resize(0) = %d; want 1", got)
+	}
+}
+
 func TestCapacityOneEvictsImmediately(t *testing.T) {
 	c := New[int, int](1)
 
