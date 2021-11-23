@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestConcurrentGetPutRemove hammers a single cache from many goroutines
@@ -79,5 +80,72 @@ func TestConcurrentGetPutWithOnEvict(t *testing.T) {
 	defer mu.Unlock()
 	if stats.Evictions != uint64(evictions) {
 		t.Fatalf("Stats().Evictions = %d; want %d (matching OnEvict call count)", stats.Evictions, evictions)
+	}
+}
+
+// TestConcurrentResizeJanitorAndClear runs Put/Get load concurrently with
+// Resize, a running janitor, explicit PurgeExpired calls, and a Clear, to
+// make sure none of the cache-wide structural operations race with each
+// other or with ordinary reads/writes.
+func TestConcurrentResizeJanitorAndClear(t *testing.T) {
+	const goroutines = 16
+
+	c := New[int, int](8)
+	c.StartJanitor(2 * time.Millisecond)
+	defer c.StopJanitor()
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func(seed int) {
+			defer wg.Done()
+			i := 0
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				key := (seed + i) % 32
+				if i%5 == 0 {
+					c.PutWithTTL(key, key, time.Millisecond)
+				} else {
+					c.Put(key, key)
+				}
+				c.Get(key)
+				i++
+			}
+		}(g)
+	}
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= 50; i++ {
+			c.Resize(1 + i%20)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 50; i++ {
+			c.PurgeExpired()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			c.Clear()
+			time.Sleep(time.Millisecond)
+		}
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	if got, cap := c.Len(), c.Cap(); got < 0 || got > cap {
+		t.Fatalf("Len() = %d; want between 0 and Cap()=%d", got, cap)
 	}
 }
