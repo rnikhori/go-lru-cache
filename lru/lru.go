@@ -1,4 +1,6 @@
-// Package lru implements a thread-safe, generic LRU (least-recently-used) cache.
+// Package lru implements a thread-safe, generic LRU (least-recently-used)
+// cache with optional per-entry TTL expiration, eviction callbacks,
+// runtime resizing, and hit/miss/eviction statistics.
 package lru
 
 import (

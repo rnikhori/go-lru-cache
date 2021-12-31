@@ -2,6 +2,24 @@
 
 A generic, thread-safe LRU cache for Go, built on `container/list` and the standard library only.
 
+## API overview
+
+| Method | Description |
+| --- | --- |
+| `New[K, V](capacity, ...opts)` | Construct a cache; `WithOnEvict` and `WithDefaultTTL` configure it |
+| `Get(key)` | Read and promote to most-recently-used; lazily evicts if expired |
+| `Peek(key)` | Read without promoting |
+| `Put(key, value)` | Insert/update, applying the cache's default TTL (if any) |
+| `PutWithTTL(key, value, ttl)` | Insert/update with an explicit expiry |
+| `Remove(key)` | Delete one entry, firing `OnEvict` |
+| `Clear()` | Delete everything, firing `OnEvict` per entry |
+| `Keys()` / `Values()` | Current contents, most- to least-recently used |
+| `Len()` / `Cap()` | Current size / configured capacity |
+| `Resize(capacity)` | Change capacity at runtime, evicting if needed |
+| `PurgeExpired()` | Proactively evict everything past its TTL |
+| `StartJanitor(interval)` / `StopJanitor()` | Run/stop a background `PurgeExpired` loop |
+| `Stats()` | Cumulative hit/miss/eviction counters |
+
 ## Usage
 
 ```go
@@ -75,11 +93,13 @@ fmt.Printf("hits=%d misses=%d evictions=%d\n", s.Hits, s.Misses, s.Evictions)
 ## Resizing
 
 `Resize` changes capacity at runtime. Shrinking evicts least-recently-used
-entries as needed; a non-positive capacity is treated as 1, matching `New`:
+entries as needed; a non-positive capacity is treated as 1, matching `New`.
+`Cap` reports the capacity currently in effect:
 
 ```go
 cache.Resize(10) // grow
 cache.Resize(2)  // shrink, evicting down to 2 entries
+cache.Cap()       // 2
 ```
 
 ## TTL / expiration
@@ -118,6 +138,14 @@ defer cache.StopJanitor()
 Starting a janitor while one is already running is a no-op; stopping one
 that isn't running is also a no-op.
 
+## Concurrency
+
+Every exported method takes the cache's internal mutex, so a `*Cache` can
+be shared across goroutines without extra locking. The one caveat is
+`OnEvict`: it runs synchronously while that lock is held, so a callback
+must not call back into the same cache (directly or via another
+goroutine it blocks on), or it will deadlock.
+
 Run the included example:
 
 ```sh
@@ -128,4 +156,15 @@ go run .
 
 ```sh
 go test ./...
+go test -race ./...
+```
+
+The stress tests in `lru/lru_stress_test.go` run many goroutines against a
+shared cache (`Get`/`Put`/`Remove`/`Clear`/`Resize`/the janitor) and are
+most useful under `-race`.
+
+## Benchmarks
+
+```sh
+go test ./lru/ -run '^$' -bench .
 ```
